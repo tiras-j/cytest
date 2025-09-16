@@ -1,0 +1,5 @@
+# Ignore anythning in bin/
+bin/
+
+# Ignore object files from intermediate compilation
+*.o

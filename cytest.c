@@ -27,10 +27,6 @@ struct fixture {
 #ifdef USE_RAX
 static rax *test_registry = NULL;
 static rax *fixt_registry = NULL;
-#else
-static struct test tests[128] = { 0 };
-static struct fixture fixtures[128] = { 0 };
-#endif
 
 static inline void _initialize_registries()
 {
@@ -41,6 +37,11 @@ static inline void _initialize_registries()
         exit(1);
     }
 }
+#else
+static struct test tests[128] = { 0 };
+static struct fixture fixtures[128] = { 0 };
+#endif
+
 
 inline void _install_test_fn(test_fn f, char *name, char *args)
 {
