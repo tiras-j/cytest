@@ -55,10 +55,6 @@ fix_t _name(void)
 // Helper to convert fix_t to your pointer type of choice
 #define unwrap_fixture(_f, _type) (_type)(_f.__inner)
 
-// Forward decls of private structs
-struct test;
-struct fixture;
-
 // Necessary shared defs
 typedef struct { void *__inner; } fix_t;
 typedef union test_fn {
@@ -70,3 +66,9 @@ typedef union test_fn {
     int (*fn5)(fix_t, fix_t, fix_t, fix_t, fix_t);
     int (*fn6)(fix_t, fix_t, fix_t, fix_t, fix_t, fix_t);
 } test_fn;
+// Forward decls of private structs
+struct test;
+struct fixture;
+extern void _install_test_fn(test_fn, char *, char *);
+extern void _install_fixture(char *, fix_t (*)(void), void(*)(fix_t));
+

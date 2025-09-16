@@ -4,7 +4,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <ctype.h>
 #include "cytest.h"
+#include "rax/rax.h"
 
 #define MAX_TEST_FIXT 6
 
@@ -22,91 +24,101 @@ struct fixture {
     void (*fini)(fix_t);
 };
 
+#ifdef USE_RAX
+static rax *test_registry = NULL;
+static rax *fixt_registry = NULL;
+#else
 static struct test tests[128] = { 0 };
 static struct fixture fixtures[128] = { 0 };
+#endif
 
-static inline void _install_test_fn(test_fn f, char *name, char *args)
+static inline void _initialize_registries()
 {
-    struct test *p = &tests[0];
-    while(p->name) p++;
+    test_registry = raxNew();
+    fixt_registry = raxNew();
+    if(!test_registry || !fixt_registry) {
+        fprintf(stderr, "[ERROR] failed to initialize registries\n");
+        exit(1);
+    }
+}
+
+inline void _install_test_fn(test_fn f, char *name, char *args)
+{
     printf("installing test, name: %s\nargs: %s\n", name, args);
+#ifdef USE_RAX
+    if(test_registry == NULL)
+        _initialize_registries();
+
+    struct test *p = malloc(sizeof(struct test));
+    if(!p) {
+        fprintf(stderr, "[ERROR] failed to install test '%s'\n", name);
+        exit(1);
+    }
+    if(raxFind(test_registry, (unsigned char *)name, strlen(name)) != raxNotFound) {
+        fprintf(stderr, "[ERROR] duplicate entry for test '%s'\n", name);
+        exit(1);
+    }
     p->name = name;
     p->args = args;
     p->fn = f;
+    raxInsert(test_registry, (unsigned char *)name, strlen(name), p, NULL);
+#else
+    struct test *p = &tests[0];
+    while(p->name) p++;
+    p->name = name;
+    p->args = args;
+    p->fn = f;
+#endif // USE_RAX
+
 }
 
-static inline void _install_fixture(char *name, fix_t (*init)(void), void(*fini)(fix_t))
+inline void _install_fixture(char *name, fix_t (*init)(void), void(*fini)(fix_t))
 {
     printf("installing fixture: %s\n", name);
+#ifdef USE_RAX
+    if(fixt_registry == NULL)
+        _initialize_registries();
+
+    struct fixture *p = malloc(sizeof(struct fixture));
+    if(!p) {
+        fprintf(stderr, "[ERROR] failed to install fixture '%s'\n", name);
+        exit(1);
+    }
+    if(raxFind(fixt_registry, (unsigned char *)name, strlen(name)) != raxNotFound) {
+        fprintf(stderr, "[ERROR] duplicate entry for fixture '%s'\n", name);
+        exit(1);
+    }
+    p->name = name;
+    p->init = init;
+    p->fini = fini;
+    raxInsert(fixt_registry, (unsigned char *)name, strlen(name), p, NULL);
+#else
     struct fixture *p = &fixtures[0];
     while(p->name) p++;
     p->name = name;
     p->init = init;
     p->fini = fini;
+#endif // USE_RAX
 }
 
-FIXTURE(fixture2, printf("FIX2 CLEANING\n"))
-{
-    fix_t f = { "Boom Shakalaka" };
-    return f;
-}
-
-FIXTURE(fixture1, printf("CLEANING\n"))
-{
-    fix_t f = { "Hello World!" };
-    return f;
-}
-
-struct my_fixture {
-    int data;
-    char *str;
-};
-
-void my_fixture_free(struct my_fixture *mf)
-{
-    printf("Cleaning up my_fixture\n");
-    if(mf->str)
-        free(mf->str);
-    free(mf);
-}
-
-FIXTURE(fix3, my_fixture_free(unwrap_fixture(_F, struct my_fixture *)))
-{
-    struct my_fixture *mf = malloc(sizeof(*mf));
-    mf->str = strdup("blah, blah, blah");
-    mf->data = 42;
-    fix_t f = { mf };
-    return f;
-}
-
-TEST_FN(mytest, fix_t fixture1, fix_t fixture2)
-{
-    printf("hello from mytest\n");
-    printf("fix1: %s\tfix2: %s\n", unwrap_fixture(fixture1, char *), unwrap_fixture(fixture2, char *));
-    return 0;
-}
-
-TEST_FN(test2, fix_t fix3)
-{
-    struct my_fixture *mf = unwrap_fixture(fix3, struct my_fixture *);
-    printf("Hello from test2 (fix3.data: %d fix3.str: %s)\n", mf->data, mf->str);
-    return 0;
-}
-
-struct fixture _load_fixt(const char *name)
+static struct fixture _load_fixt(const char *name)
 {
     printf("Loading fixture: %s\n", name);
+#ifdef USE_RAX
+    struct fixture *p = raxFind(fixt_registry, (unsigned char *)name, strlen(name));
+    if(p) return *p;
+#else
     struct fixture *p = &fixtures[0];
     while(p->name) {
         if(!strcmp(name, p->name))
             return *p;
         p++;
     }
+#endif // USE_RAX
     fprintf(stderr, "[ERROR] could not load fixture: %s\n", name);
     exit(1);
 }
 
-#include <ctype.h>
 static int _load_fixtures(struct fixture *fxs, const char *arg_str)
 {
     int argc = 0;
@@ -173,9 +185,29 @@ static int do_test(struct test *t, fix_t *args, int argc)
 
 int main(int argc, char *argv[])
 {
+    (void)argc; (void)argv;
     fix_t fix_args[MAX_TEST_FIXT] = { 0 };
     struct fixture fix_objs[MAX_TEST_FIXT] = { 0 };
 
+#ifdef USE_RAX
+    struct test *runner;
+    raxIterator iter;
+    raxStart(&iter, test_registry);
+    raxSeek(&iter, "^", NULL, 0);
+    while(raxNext(&iter)) {
+        runner = raxFind(test_registry, iter.key, iter.key_len);
+        int cnt = _load_fixtures(fix_objs, runner->args);
+        for(int i = 0; i < cnt; i++)
+            fix_args[i] = fix_objs[i].init();
+        
+        //_do_test_call(runner->fn, fix_args, cnt);
+        do_test(runner, fix_args, cnt);
+
+        for(int i = 0; i < cnt; i++)
+            fix_objs[i].fini(fix_args[i]);
+    }
+    raxStop(&iter);
+#else
     struct test *runner = &tests[0];
     while(runner->name) {
         int cnt = _load_fixtures(fix_objs, runner->args);
@@ -190,4 +222,5 @@ int main(int argc, char *argv[])
 
         runner++;
     }
+#endif // USE_RAX
 }
