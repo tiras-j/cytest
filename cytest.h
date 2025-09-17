@@ -17,7 +17,7 @@
 int _test(_fixtures);                                       \
 __attribute__((constructor))                                \
 void testcons_##_test(void) {                               \
-    _install_test_fn((test_fn)_test, #_test, #_fixtures); } \
+    _install_test_fn((test_fn)_test, __FILE__, #_test, #_fixtures); } \
 int _test(_fixtures)
 
 /* FIXTURE
@@ -69,6 +69,6 @@ typedef union test_fn {
 // Forward decls of private structs
 struct test;
 struct fixture;
-extern void _install_test_fn(test_fn, char *, char *);
+extern void _install_test_fn(test_fn, char *, char *, char *);
 extern void _install_fixture(char *, fix_t (*)(void), void(*)(fix_t));
 

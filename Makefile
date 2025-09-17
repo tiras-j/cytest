@@ -1,18 +1,24 @@
 CFLAGS?= -Wall -Wextra -I. -I./deps/
 LDFLAGS= -lm
 
-tests/test1.o: tests/test1.c cytest.h 
-deps/rax/rax.o: deps/rax/rax.c deps/rax/rax.h
+all: test
 
-test1.o: tests/test1.o
-rax.o: deps/rax/rax.o
-cytest.o: cytest.h deps/rax/rax.h
-
-test: cytest.o test1.o rax.o
+test: cytest.o test1.o test2.o rax.o
 	$(CC) -o bin/$@ $^ $(LDFLAGS) -DUSE_RAX
+	./bin/test
 
-.c.o:
+rax.o: deps/rax/rax.c deps/rax/rax.h
+	@echo rax support
 	$(CC) -c $(CFLAGS) $<
 
+%.o: %.c %.h
+	@echo Testing $@ from $*
+	$(CC) -c $(CFLAGS) $<
+
+%.o: tests/%.c
+	@echo Testing $@ from $*
+	$(CC) -c $(CFLAGS) $<
+
+.PHONY: clean
 clean:
-	rm -f bin/* *.o
+	rm -f bin/* *.o deps/rax/*.o tests/*.o

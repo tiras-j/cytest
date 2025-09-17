@@ -43,9 +43,9 @@ static struct fixture fixtures[128] = { 0 };
 #endif
 
 
-inline void _install_test_fn(test_fn f, char *name, char *args)
+inline void _install_test_fn(test_fn f, char *file, char *name, char *args)
 {
-    printf("installing test, name: %s\nargs: %s\n", name, args);
+    printf("installing test, file: %s\tname: %s\targs: %s\n", file, name, args);
 #ifdef USE_RAX
     if(test_registry == NULL)
         _initialize_registries();
